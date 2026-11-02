@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>FieldSight</title><style>
+body{margin:0;background:#000;color:#f5d36b;font-family:system-ui,sans-serif;text-align:center;overflow-x:hidden}
+h1{letter-spacing:.3em;margin:14px 0 0;font-size:22px}small{color:#a99be0}
+#orbWrap{position:relative;height:300px}canvas{display:block;margin:auto}
+#val{font-size:56px;font-weight:800;text-shadow:0 0 18px #d4af37}#lbl{font-size:16px;color:#ccc;min-height:22px}
+button{background:#4B0082;color:#ffd75e;border:1px solid #d4af37;border-radius:24px;padding:12px 16px;margin:5px;font-size:15px}
+#msg{color:#ff9;padding:8px 14px;font-size:14px}#hot{display:none;color:#000;background:#ffd700;font-weight:800;padding:8px;border-radius:8px;margin:8px}
+</style></head><body>
+<h1>FIELDSIGHT</h1><small>see the invisible</small>
+<div id="orbWrap"><canvas id="orb" width="300" height="300"></canvas></div>
+<div id="val">--</div><div id="lbl">Tap START</div><div id="hot">🔥 HOT SPOT — something's pulling here</div>
+<div><button id="start">▶ START</button><button id="cal">CALIBRATE</button><button id="snd">🔊 SOUND OFF</button><button id="snap">📸 SNAP</button></div>
+<canvas id="trail" width="340" height="120"></canvas><div id="msg"></div>
+<script>
+const $=id=>document.getElementById(id),orb=$('orb').getContext('2d'),tr=$('trail').getContext('2d');
+let F=0,X=0,Y=0,base=null,hist=[],ac,osc,gain,sound=false,mode='',heading=0,t=0;
+function vibe(f){if(f<25)return'Quiet zone';if(f<70)return"Earth's natural field — chill";if(f<150)return'Something nearby is pulling';return'Strong pull — magnet, speaker or wires close'}
+function update(x,y,z){X=x;Y=y;F=Math.hypot(x,y,z);hist.push(F);if(hist.length>340)hist.shift();
+ $('val').textContent=F.toFixed(0)+' µT';$('lbl').textContent=vibe(F);
+ const hot=base&&F>base*1.6+15;$('hot').style.display=hot?'block':'none';if(hot&&navigator.vibrate)navigator.vibrate(40);
+ if(sound&&osc)osc.frequency.setTargetAtTime(110+Math.min(F,400)*3,ac.currentTime,.05)}
+function draw(){t+=.05;const s=mode==='compass'?50:F,r=50+Math.min(s,300)/3+Math.sin(t*(1+s/40))*6;
+ orb.clearRect(0,0,300,300);const g=orb.createRadialGradient(150,150,5,150,150,r);
+ g.addColorStop(0,'#fff6c0');g.addColorStop(.4,'#d4af37');g.addColorStop(1,'rgba(75,0,130,0)');orb.fillStyle=g;orb.beginPath();orb.arc(150,150,r,0,7);orb.fill();
+ const a=mode==='compass'?-heading*Math.PI/180:Math.atan2(X,Y);orb.strokeStyle='#ffd75e';orb.lineWidth=4;orb.beginPath();orb.moveTo(150,150);orb.lineTo(150+Math.sin(a)*130,150-Math.cos(a)*130);orb.stroke();
+ tr.fillStyle='#000';tr.fillRect(0,0,340,120);hist.forEach((v,i)=>{const k=Math.min(v/200,1);tr.fillStyle=`hsl(${275-k*230},100%,${30+k*30}%)`;tr.fillRect(i,120-k*115,1,k*115)});
+ requestAnimationFrame(draw)}
+draw();
+async function start(){try{
+ if('Magnetometer'in window){const p=await navigator.permissions.query({name:'magnetometer'}).catch(()=>({state:'granted'}));
+  if(p.state==='denied')throw'denied';const m=new Magnetometer({frequency:20});m.onreading=()=>update(m.x,m.y,m.z);m.onerror=e=>fallback(e.error.name);m.start();mode='mag';$('msg').textContent='Live field sensor on. Sweep the phone slowly.';}
+ else fallback('none')}catch(e){fallback(e)}}
+function fallback(why){mode='compass';const h=e=>{heading=e.webkitCompassHeading||(360-(e.alpha||0));$('val').textContent=Math.round(heading)+'°';$('lbl').textContent='Compass mode (direction only)'};
+ if(window.DeviceOrientationEvent){addEventListener('deviceorientationabsolute',h);addEventListener('deviceorientation',h)}
+ $('msg').innerHTML='Full field reading is locked on this browser. On Android Chrome: open <b>chrome://flags</b>, search <b>Generic Sensor Extra Classes</b>, set Enabled, relaunch. iPhone only supports compass mode.'}
+$('start').onclick=start;
+$('cal').onclick=()=>{base=F;$('msg').textContent='Calibrated at '+F.toFixed(0)+' µT. Hold away from metal when you tap this.'};
+$('snd').onclick=()=>{sound=!sound;$('snd').textContent=sound?'🔊 SOUND ON':'🔊 SOUND OFF';
+ if(sound&&!ac){ac=new AudioContext();osc=ac.createOscillator();gain=ac.createGain();gain.gain.value=.08;osc.type='triangle';osc.connect(gain).connect(ac.destination);osc.start()}
+ if(gain)gain.gain.value=sound?.08:0};
+$('snap').onclick=async()=>{const c=document.createElement('canvas');c.width=360;c.height=520;const x=c.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,360,520);
+ x.drawImage($('orb'),30,40);x.drawImage($('trail'),10,380);x.fillStyle='#ffd75e';x.font='bold 22px sans-serif';x.fillText('FIELDSIGHT',110,30);x.font='bold 30px sans-serif';x.fillText($('val').textContent,120,370);
+ c.toBlob(async b=>{const f=new File([b],'fieldsight.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f],title:'FieldSight'});else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='fieldsight.png';a.click()}})};
+</script></body></html>
